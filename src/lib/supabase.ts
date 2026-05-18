@@ -5,8 +5,14 @@ import ws from "ws";
 import { env } from "../config/env";
 import { AppError } from "./errors";
 
+// `ws` is the correct runtime WebSocket implementation for Node 20, but its
+// TypeScript constructor signatures don't structurally match supabase-js's
+// internal `WebSocketLikeConstructor` type (both `onerror` and `address`
+// parameter types diverge). The `as any` cast is intentional: supabase-js
+// only enforces the shape at runtime (where ws works correctly), not statically.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-  realtime: { transport: ws },
+  realtime: { transport: ws as any },
 });
 
 export async function uploadFlyer(pngBuffer: Buffer, spaceName: string): Promise<string> {
