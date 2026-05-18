@@ -49,23 +49,50 @@ const FORMAT_HINT = [
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 
-export async function handleChatEvent(event: ChatEvent): Promise<void> {
-  // Ignore non-message events (ADDED_TO_SPACE, etc.)
-  if (event.type !== "MESSAGE") return;
+// Normalise both the legacy flat format and the Add-on nested format into a
+// single shape so the rest of the handler doesn't need to branch.
+function extractEventParts(event: ChatEvent) {
+  if (event.chat) {
+    // Add-on format: { chat: { eventType, user, space, message } }
+    return {
+      eventType: event.chat.eventType,
+      message:   event.chat.message,
+      space:     event.chat.space,
+    };
+  }
+  // Legacy flat format: { type, message, space }
+  return {
+    eventType: event.type,
+    message:   event.message,
+    space:     event.space,
+  };
+}
 
-  const { message } = event;
+export async function handleChatEvent(event: ChatEvent): Promise<void> {
+  const { eventType, message, space } = extractEventParts(event);
+
+  // Ignore non-message events (ADDED_TO_SPACE, etc.)
+  if (eventType !== "MESSAGE") {
+    console.log("[bot] ignoring event type:", eventType);
+    return;
+  }
+
+  if (!message || !space) {
+    console.log("[bot] missing message or space, skipping");
+    return;
+  }
 
   // Ignore messages from other bots
   if (message.sender.type === "BOT") return;
 
-  const spaceName  = message.space.name;
+  const spaceName  = message.space?.name ?? space.name;
   const threadName = message.thread.name;
   const msgName    = message.name;
 
   // In non-dedicated spaces, the bot only receives events when @mentioned —
   // no extra filtering needed. Dedup handles the case where the dedicated
   // space message also triggers an @mention event.
-  if (!isDedicatedSpace(spaceName) && !isDedicatedSpace(event.space.name)) {
+  if (!isDedicatedSpace(spaceName) && !isDedicatedSpace(space.name)) {
     // @mention from an outside space — process it
   }
 
