@@ -4,7 +4,11 @@ import { AppError } from "./errors";
 
 type ServiceAccountCredentials = Record<string, unknown>;
 
-const credentials = JSON.parse(env.GOOGLE_CHAT_CREDENTIALS) as ServiceAccountCredentials;
+// Strip any trailing non-JSON characters (e.g. zsh `%` no-newline marker or shell prompt
+// text that can appear when the value is copy-pasted from a terminal into Railway).
+const _rawCreds = env.GOOGLE_CHAT_CREDENTIALS.trim();
+const _credJson = _rawCreds.slice(0, _rawCreds.lastIndexOf("}") + 1);
+const credentials = JSON.parse(_credJson) as ServiceAccountCredentials;
 
 const auth = new GoogleAuth({
   credentials,
