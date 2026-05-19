@@ -1,14 +1,12 @@
-import type { ChatEvent } from "../types/chat";
+import type { ChatEvent, ChatAttachment } from "../types/chat";
+import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
 import { downloadAttachment, postTextMessage, postFlyerMessage } from "../lib/google-chat";
 import { uploadFlyer } from "../lib/supabase";
-import { env } from "../config/env";
 import { isAppError } from "../lib/errors";
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
-// Tracks processed message names to prevent double-handling when a message
-// in the dedicated space is also an @mention.
 
 const processedMessages = new Set<string>();
 const MAX_DEDUP_CACHE = 1000;
@@ -23,44 +21,56 @@ function isDuplicate(messageName: string): boolean {
   return false;
 }
 
-// ── Space resolution ──────────────────────────────────────────────────────────
+// ── Pending briefings (text received, waiting for photo) ──────────────────────
+// Keyed by spaceName. Briefings expire after 30 minutes.
 
-function isDedicatedSpace(spaceName: string): boolean {
-  return (
-    spaceName === `spaces/${env.DEDICATED_SPACE_ID}` ||
-    spaceName === env.DEDICATED_SPACE_ID
-  );
+interface PendingEntry {
+  briefing: ParsedBriefing;
+  storedAt: number;
 }
 
-// ── Expected format hint (sent on parse failure) ──────────────────────────────
+const PENDING_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const pendingBriefings = new Map<string, PendingEntry>();
+
+function storePending(spaceName: string, briefing: ParsedBriefing): void {
+  pendingBriefings.set(spaceName, { briefing, storedAt: Date.now() });
+}
+
+function consumePending(spaceName: string): ParsedBriefing | null {
+  const entry = pendingBriefings.get(spaceName);
+  if (!entry) return null;
+  pendingBriefings.delete(spaceName);
+  if (Date.now() - entry.storedAt > PENDING_TTL_MS) return null; // expired
+  return entry.briefing;
+}
+
+// ── Format hint ───────────────────────────────────────────────────────────────
 
 const FORMAT_HINT = [
-  "Expected format:",
+  "Send me the briefing like this (any format works):",
   "```",
-  "Speaker's Handle: @handle",
+  "Speaker: @handle",
   "Time: 8pm",
   "Date: May 15",
-  "Occupation: Role",
+  "Role: Engineer",
   "Topic: Talk title",
   "Link: https://...",
   "```",
-  "Also attach the speaker's photo to the message.",
+  "Then attach or send the speaker's photo.",
 ].join("\n");
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// ── Event normaliser ──────────────────────────────────────────────────────────
+// Google Chat sends the Add-on event format: { commonEventObject, chat: { ... } }
+// The legacy flat format { type, message, space } is also supported.
 
-// Normalise both the legacy flat format and the Add-on nested format into a
-// single shape so the rest of the handler doesn't need to branch.
 function extractEventParts(event: ChatEvent) {
   if (event.chat) {
-    // Add-on format: { chat: { eventType, user, space, message } }
     return {
       eventType: event.chat.eventType,
       message:   event.chat.message,
       space:     event.chat.space,
     };
   }
-  // Legacy flat format: { type, message, space }
   return {
     eventType: event.type,
     message:   event.message,
@@ -68,10 +78,33 @@ function extractEventParts(event: ChatEvent) {
   };
 }
 
+// ── Render and post ───────────────────────────────────────────────────────────
+
+async function renderAndPost(
+  spaceName: string,
+  threadName: string,
+  briefing: ParsedBriefing,
+  imageAttachment: ChatAttachment,
+): Promise<void> {
+  try {
+    const photoBuffer = await downloadAttachment(imageAttachment.attachmentDataRef.resourceName);
+    const pngBuffer   = await renderFlyer(briefing, photoBuffer);
+    const imageUrl    = await uploadFlyer(pngBuffer, spaceName);
+    await postFlyerMessage(spaceName, imageUrl, threadName);
+  } catch (err) {
+    const userMessage = isAppError(err)
+      ? err.message
+      : "Something went wrong while generating the flyer. Please try again.";
+    await postTextMessage(spaceName, userMessage, threadName);
+    if (!isAppError(err)) console.error("[bot] Unexpected error:", err);
+  }
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+
 export async function handleChatEvent(event: ChatEvent): Promise<void> {
   const { eventType, message, space } = extractEventParts(event);
 
-  // Ignore non-message events (ADDED_TO_SPACE, etc.)
   if (eventType !== "MESSAGE") {
     console.log("[bot] ignoring event type:", eventType);
     return;
@@ -82,64 +115,60 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
     return;
   }
 
-  // Ignore messages from other bots
   if (message.sender.type === "BOT") return;
+  if (isDuplicate(message.name)) return;
 
   const spaceName  = message.space?.name ?? space.name;
   const threadName = message.thread.name;
-  const msgName    = message.name;
 
-  // In non-dedicated spaces, the bot only receives events when @mentioned —
-  // no extra filtering needed. Dedup handles the case where the dedicated
-  // space message also triggers an @mention event.
-  if (!isDedicatedSpace(spaceName) && !isDedicatedSpace(space.name)) {
-    // @mention from an outside space — process it
-  }
-
-  if (isDuplicate(msgName)) return;
-
-  // ── Parse briefing fields ─────────────────────────────────────────────────
-  const parseResult = parseBriefing(message.text);
-
-  if (!parseResult.ok) {
-    const fieldList = parseResult.missingFields.map((f) => `• ${f}`).join("\n");
-    await postTextMessage(
-      spaceName,
-      `Missing required fields:\n${fieldList}\n\n${FORMAT_HINT}`,
-      threadName,
-    );
-    return;
-  }
-
-  // ── Require an image attachment ───────────────────────────────────────────
   const imageAttachment = message.attachment?.find(
     (a) => a.source === "UPLOADED_CONTENT" && a.contentType.startsWith("image/"),
   );
 
-  if (!imageAttachment) {
-    await postTextMessage(
-      spaceName,
-      `Please attach the speaker's photo to the message.\n\n${FORMAT_HINT}`,
-      threadName,
-    );
+  // Non-trivial text: message has content beyond the @mention prefix
+  const bodyText = (message.text ?? "").replace(/^@\S+\s*/m, "").trim();
+  const hasText  = bodyText.length > 0;
+
+  // ── Photo only: look up a pending briefing from a previous message ─────────
+  if (imageAttachment && !hasText) {
+    const pending = consumePending(spaceName);
+    if (!pending) {
+      await postTextMessage(
+        spaceName,
+        `I don't have any briefing details for this space yet.\n\n${FORMAT_HINT}`,
+        threadName,
+      );
+      return;
+    }
+    await renderAndPost(spaceName, threadName, pending, imageAttachment);
     return;
   }
 
-  // ── Render and post ───────────────────────────────────────────────────────
-  try {
-    const photoBuffer = await downloadAttachment(imageAttachment.attachmentDataRef.resourceName);
-    const pngBuffer   = await renderFlyer(parseResult.briefing, photoBuffer);
-    const imageUrl    = await uploadFlyer(pngBuffer, spaceName);
-    await postFlyerMessage(spaceName, imageUrl, threadName);
-  } catch (err) {
-    const userMessage = isAppError(err)
-      ? err.message
-      : "Something went wrong while generating the flyer. Please try again.";
+  // ── Text (with or without photo) ──────────────────────────────────────────
+  if (hasText) {
+    const parseResult = await parseBriefing(message.text);
 
-    await postTextMessage(spaceName, userMessage, threadName);
+    if (!parseResult.ok) {
+      const fieldList = parseResult.missingFields.map((f) => `• ${f}`).join("\n");
+      await postTextMessage(
+        spaceName,
+        `I couldn't find all the details I need:\n${fieldList}\n\n${FORMAT_HINT}`,
+        threadName,
+      );
+      return;
+    }
 
-    if (!isAppError(err)) {
-      console.error("[bot] Unexpected error:", err);
+    if (imageAttachment) {
+      // Text + photo in the same message — generate immediately
+      await renderAndPost(spaceName, threadName, parseResult.briefing, imageAttachment);
+    } else {
+      // Text only — store and wait for photo
+      storePending(spaceName, parseResult.briefing);
+      await postTextMessage(
+        spaceName,
+        "Got the details! Now send the speaker's photo and I'll generate the flyer. 🎨",
+        threadName,
+      );
     }
   }
 }

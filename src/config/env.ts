@@ -9,6 +9,7 @@ const schema = z.object({
   ASSETS_DIR: z.string().default("./assets"),
   PUBSUB_AUDIENCE: z.string().url().optional(),
   FLYER_TOOL_BACKEND_URL: z.string().url().optional(),
+  ANTHROPIC_API_KEY: z.string().min(1),
 });
 
 const result = schema.safeParse(process.env);
