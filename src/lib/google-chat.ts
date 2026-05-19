@@ -94,7 +94,9 @@ export async function postFlyerMessage(
 
 export async function downloadAttachment(resourceName: string): Promise<Buffer> {
   const token = await bearerToken();
-  const url = `${CHAT_BASE}/${resourceName}?alt=media`;
+  // Google Chat media download uses a dedicated /media/ endpoint, distinct
+  // from the general v1 message API. The resourceName is opaque (Base64-ish).
+  const url = `${CHAT_BASE}/media/${resourceName}?alt=media`;
   console.log("[chat] downloading attachment from:", url);
 
   const res = await fetch(url, {
