@@ -72,6 +72,9 @@ function extractEventParts(event: ChatEvent) {
       event.chat.type ??
       (event.chat.message ? "MESSAGE" : undefined) as typeof event.chat.type;
 
+    console.log("[bot] chat keys:", Object.keys(event.chat).join(", "));
+    console.log("[bot] eventType resolved:", eventType, "| message present:", !!event.chat.message);
+
     return {
       eventType,
       message: event.chat.message,

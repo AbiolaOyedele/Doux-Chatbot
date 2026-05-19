@@ -30,7 +30,7 @@ export async function webhookHandler(req: Request, res: Response): Promise<void>
   void (async () => {
     try {
       const raw = Buffer.from(envelope.message.data, "base64").toString("utf-8");
-      console.log("[webhook] decoded event:", raw.slice(0, 300));
+      console.log("[webhook] decoded event:", raw.slice(0, 1500));
       const event = JSON.parse(raw) as ChatEvent;
       await handleChatEvent(event);
     } catch (err) {
