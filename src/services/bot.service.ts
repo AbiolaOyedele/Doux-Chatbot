@@ -122,6 +122,9 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
     return;
   }
 
+  console.log("[bot] message.text:", JSON.stringify(message.text ?? null));
+  console.log("[bot] attachments:", (message.attachment ?? []).length);
+
   if (message.sender.type === "BOT") return;
   if (isDuplicate(message.name)) return;
 
