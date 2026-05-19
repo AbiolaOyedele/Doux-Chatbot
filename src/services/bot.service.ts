@@ -131,6 +131,8 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
   const spaceName  = message.space?.name ?? space.name;
   const threadName = message.thread.name;
 
+  console.log("[bot] raw attachments:", JSON.stringify(message.attachment ?? []));
+
   const imageAttachment = message.attachment?.find(
     (a) => a.source === "UPLOADED_CONTENT" && a.contentType.startsWith("image/"),
   );

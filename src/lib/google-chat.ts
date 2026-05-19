@@ -13,8 +13,10 @@ const credentials = JSON.parse(_credJson) as ServiceAccountCredentials;
 const auth = new GoogleAuth({
   credentials,
   scopes: [
+    "https://www.googleapis.com/auth/chat.bot",
     "https://www.googleapis.com/auth/chat.messages",
     "https://www.googleapis.com/auth/chat.messages.create",
+    "https://www.googleapis.com/auth/chat.messages.readonly",
   ],
 });
 
@@ -93,13 +95,19 @@ export async function postFlyerMessage(
 export async function downloadAttachment(resourceName: string): Promise<Buffer> {
   const token = await bearerToken();
   const url = `${CHAT_BASE}/${resourceName}?alt=media`;
+  console.log("[chat] downloading attachment from:", url);
+
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
+
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[chat] download failed:", res.status, body.slice(0, 500));
     throw new AppError(502, "Failed to download the attached image from Google Chat.", "CHAT_ATTACHMENT_DOWNLOAD_FAILED", {
       status: res.status,
       resourceName,
+      body: body.slice(0, 500),
     });
   }
   const buf = await res.arrayBuffer();
