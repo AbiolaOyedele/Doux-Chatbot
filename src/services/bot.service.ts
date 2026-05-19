@@ -3,7 +3,7 @@ import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
 import { downloadAttachment, postTextMessage, postFlyerMessage } from "../lib/google-chat";
-import { uploadFlyer } from "../lib/supabase";
+import { saveFlyer } from "../lib/flyer-storage";
 import { isAppError } from "../lib/errors";
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ async function renderAndPost(
   try {
     const photoBuffer = await downloadAttachment(imageAttachment.attachmentDataRef.resourceName);
     const pngBuffer   = await renderFlyer(briefing, photoBuffer);
-    const imageUrl    = await uploadFlyer(pngBuffer, spaceName);
+    const imageUrl    = await saveFlyer(pngBuffer);
     await postFlyerMessage(spaceName, imageUrl, threadName);
   } catch (err) {
     const userMessage = isAppError(err)
