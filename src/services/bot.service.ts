@@ -65,22 +65,19 @@ const FORMAT_HINT = [
 
 function extractEventParts(event: ChatEvent) {
   if (event.chat) {
-    // Google uses "type" or "eventType" depending on the API version.
-    // Fall back to inferring MESSAGE from the presence of event.chat.message.
+    // Add-on format wraps message + space under chat.messagePayload in newer
+    // API versions; fall back to chat.message / chat.space for older shapes.
+    const message = event.chat.messagePayload?.message ?? event.chat.message;
+    const space   = event.chat.messagePayload?.space   ?? event.chat.space;
+
     const eventType =
       event.chat.eventType ??
       event.chat.type ??
-      (event.chat.message ? "MESSAGE" : undefined) as typeof event.chat.type;
+      (message ? "MESSAGE" : undefined) as typeof event.chat.type;
 
-    console.log("[bot] chat keys:", Object.keys(event.chat).join(", "));
-    console.log("[bot] eventType resolved:", eventType, "| message present:", !!event.chat.message);
-
-    return {
-      eventType,
-      message: event.chat.message,
-      space:   event.chat.space,
-    };
+    return { eventType, message, space };
   }
+
   return {
     eventType: event.type,
     message:   event.message,

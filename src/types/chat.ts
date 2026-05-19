@@ -49,14 +49,20 @@ export interface ChatEvent {
     platform: string;
   };
   // Add-on format: all Chat data is nested under "chat".
-  // Google uses either "type" or "eventType" depending on the API version;
-  // message is optional because non-MESSAGE events may omit it.
+  // Google uses different shapes depending on the API version:
+  //   - Some send chat.message + chat.space directly
+  //   - Newer Add-on format wraps them under chat.messagePayload
+  //   - The event type may be "type", "eventType", or inferred from the payload
   chat?: {
     type?: "MESSAGE" | "ADDED_TO_SPACE" | "REMOVED_FROM_SPACE" | "CARD_CLICKED";
     eventType?: "MESSAGE" | "ADDED_TO_SPACE" | "REMOVED_FROM_SPACE" | "CARD_CLICKED";
     user: ChatSender;
-    space: ChatSpace;
+    space?: ChatSpace;
     message?: ChatMessage;
+    messagePayload?: {
+      space: ChatSpace;
+      message: ChatMessage;
+    };
   };
   // Legacy flat format (kept for forward-compatibility)
   type?: "MESSAGE" | "ADDED_TO_SPACE" | "REMOVED_FROM_SPACE" | "CARD_CLICKED";
