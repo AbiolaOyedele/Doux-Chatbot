@@ -19,12 +19,15 @@ export async function uploadFlyer(pngBuffer: Buffer, spaceName: string): Promise
   const safeName = spaceName.replace(/\//g, "_").replace(/[^a-z0-9_-]/gi, "");
   const filename = `bot/${Date.now()}_${safeName}.png`;
 
+  console.log("[supabase] uploading flyer:", filename, "size:", pngBuffer.length);
+
   const { error } = await supabase.storage.from("flyers").upload(filename, pngBuffer, {
     contentType: "image/png",
     upsert: false,
   });
 
   if (error) {
+    console.error("[supabase] upload failed:", JSON.stringify(error));
     throw new AppError(500, "Failed to upload flyer to storage.", "FLYER_UPLOAD_FAILED", error);
   }
 
