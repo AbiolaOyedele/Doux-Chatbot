@@ -97,7 +97,6 @@ export async function downloadAttachment(resourceName: string): Promise<Buffer> 
   // Google Chat media download uses a dedicated /media/ endpoint, distinct
   // from the general v1 message API. The resourceName is opaque (Base64-ish).
   const url = `${CHAT_BASE}/media/${resourceName}?alt=media`;
-  console.log("[chat] downloading attachment from:", url);
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -105,10 +104,8 @@ export async function downloadAttachment(resourceName: string): Promise<Buffer> 
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.error("[chat] download failed:", res.status, body.slice(0, 500));
     throw new AppError(502, "Failed to download the attached image from Google Chat.", "CHAT_ATTACHMENT_DOWNLOAD_FAILED", {
       status: res.status,
-      resourceName,
       body: body.slice(0, 500),
     });
   }

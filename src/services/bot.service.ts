@@ -112,26 +112,15 @@ async function renderAndPost(
 export async function handleChatEvent(event: ChatEvent): Promise<void> {
   const { eventType, message, space } = extractEventParts(event);
 
-  if (eventType !== "MESSAGE") {
-    console.log("[bot] ignoring event type:", eventType);
-    return;
-  }
-
-  if (!message || !space) {
-    console.log("[bot] missing message or space, skipping");
-    return;
-  }
-
-  console.log("[bot] message.text:", JSON.stringify(message.text ?? null));
-  console.log("[bot] attachments:", (message.attachment ?? []).length);
+  // Ignore non-message events (ADDED_TO_SPACE, etc.) and malformed payloads
+  if (eventType !== "MESSAGE") return;
+  if (!message || !space) return;
 
   if (message.sender.type === "BOT") return;
   if (isDuplicate(message.name)) return;
 
   const spaceName  = message.space?.name ?? space.name;
   const threadName = message.thread.name;
-
-  console.log("[bot] raw attachments:", JSON.stringify(message.attachment ?? []));
 
   const imageAttachment = message.attachment?.find(
     (a) => a.source === "UPLOADED_CONTENT" && a.contentType.startsWith("image/"),
