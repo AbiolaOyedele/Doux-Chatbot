@@ -65,10 +65,17 @@ const FORMAT_HINT = [
 
 function extractEventParts(event: ChatEvent) {
   if (event.chat) {
+    // Google uses "type" or "eventType" depending on the API version.
+    // Fall back to inferring MESSAGE from the presence of event.chat.message.
+    const eventType =
+      event.chat.eventType ??
+      event.chat.type ??
+      (event.chat.message ? "MESSAGE" : undefined) as typeof event.chat.type;
+
     return {
-      eventType: event.chat.eventType,
-      message:   event.chat.message,
-      space:     event.chat.space,
+      eventType,
+      message: event.chat.message,
+      space:   event.chat.space,
     };
   }
   return {
