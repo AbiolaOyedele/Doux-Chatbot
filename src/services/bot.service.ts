@@ -2,8 +2,7 @@ import type { ChatEvent, ChatAttachment } from "../types/chat";
 import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
-import { downloadAttachment, postTextMessage, postFlyerMessage } from "../lib/google-chat";
-import { saveFlyer } from "../lib/flyer-storage";
+import { downloadAttachment, postTextMessage, postFlyerAsFile } from "../lib/google-chat";
 import { isAppError } from "../lib/errors";
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -96,8 +95,10 @@ async function renderAndPost(
   try {
     const photoBuffer = await downloadAttachment(imageAttachment.attachmentDataRef.resourceName);
     const pngBuffer   = await renderFlyer(briefing, photoBuffer);
-    const imageUrl    = await saveFlyer(pngBuffer);
-    await postFlyerMessage(spaceName, imageUrl, threadName);
+
+    const slug     = briefing.handle.replace(/[^a-z0-9]/gi, "").toLowerCase() || "speaker";
+    const filename = `doux-${slug}-${Date.now()}.png`;
+    await postFlyerAsFile(spaceName, pngBuffer, filename, threadName);
   } catch (err) {
     const userMessage = isAppError(err)
       ? err.message

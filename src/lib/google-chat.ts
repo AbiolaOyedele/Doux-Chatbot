@@ -20,7 +20,8 @@ const auth = new GoogleAuth({
   ],
 });
 
-const CHAT_BASE = "https://chat.googleapis.com/v1";
+const CHAT_BASE   = "https://chat.googleapis.com/v1";
+const UPLOAD_BASE = "https://chat.googleapis.com/upload/v1";
 
 async function bearerToken(): Promise<string> {
   const client = await auth.getClient();
@@ -87,6 +88,81 @@ export async function postFlyerMessage(
             },
           ],
         },
+      },
+    ],
+  });
+}
+
+// Upload a binary buffer to Google Chat as an attachment.
+// Uses the multipart/related upload form expected by the
+// /upload/v1/{parent}/attachments:upload endpoint.
+async function uploadAttachment(
+  spaceName: string,
+  buffer: Buffer,
+  filename: string,
+  contentType: string,
+): Promise<{ attachmentUploadToken: string }> {
+  const token = await bearerToken();
+
+  const boundary = `doux-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const metadata = JSON.stringify({ filename });
+
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+      `${metadata}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Type: ${contentType}\r\n\r\n`,
+      "utf-8",
+    ),
+    buffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`, "utf-8"),
+  ]);
+
+  const url = `${UPLOAD_BASE}/${spaceName}/attachments:upload?uploadType=multipart`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+      "Content-Length": String(body.length),
+    },
+    body,
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new AppError(502, "Failed to upload flyer to Google Chat.", "CHAT_ATTACHMENT_UPLOAD_FAILED", {
+      status: res.status,
+      detail: detail.slice(0, 500),
+    });
+  }
+
+  const data = (await res.json()) as { attachmentDataRef?: { attachmentUploadToken?: string } };
+  const uploadToken = data.attachmentDataRef?.attachmentUploadToken;
+  if (!uploadToken) {
+    throw new AppError(502, "Chat upload returned no token.", "CHAT_ATTACHMENT_NO_TOKEN", { response: data });
+  }
+  return { attachmentUploadToken: uploadToken };
+}
+
+export async function postFlyerAsFile(
+  spaceName: string,
+  pngBuffer: Buffer,
+  filename: string,
+  threadName?: string,
+): Promise<void> {
+  const { attachmentUploadToken } = await uploadAttachment(spaceName, pngBuffer, filename, "image/png");
+
+  await chatPost(`${spaceName}/messages`, {
+    text: "Flyer generated ✅",
+    ...(threadName ? { thread: { name: threadName } } : {}),
+    attachment: [
+      {
+        contentName: filename,
+        contentType: "image/png",
+        attachmentDataRef: { attachmentUploadToken },
       },
     ],
   });
