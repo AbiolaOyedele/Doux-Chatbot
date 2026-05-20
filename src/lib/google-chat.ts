@@ -1,31 +1,18 @@
-import { GoogleAuth, OAuth2Client } from "google-auth-library";
+import { OAuth2Client } from "google-auth-library";
 import { env } from "../config/env";
 import { AppError } from "./errors";
 
-type ServiceAccountCredentials = Record<string, unknown>;
-
-// Strip any trailing non-JSON characters (e.g. zsh `%` no-newline marker or shell prompt
-// text that can appear when the value is copy-pasted from a terminal into Railway).
-const _rawCreds = env.GOOGLE_CHAT_CREDENTIALS.trim();
-const _credJson = _rawCreds.slice(0, _rawCreds.lastIndexOf("}") + 1);
-const credentials = JSON.parse(_credJson) as ServiceAccountCredentials;
-
-const auth = new GoogleAuth({
-  credentials,
-  scopes: [
-    "https://www.googleapis.com/auth/chat.bot",
-    "https://www.googleapis.com/auth/chat.messages",
-    "https://www.googleapis.com/auth/chat.messages.create",
-    "https://www.googleapis.com/auth/chat.messages.readonly",
-  ],
-});
+const oauthClient = new OAuth2Client(
+  env.GOOGLE_CLIENT_ID,
+  env.GOOGLE_CLIENT_SECRET,
+);
+oauthClient.setCredentials({ refresh_token: env.GOOGLE_REFRESH_TOKEN });
 
 const CHAT_BASE   = "https://chat.googleapis.com/v1";
 const UPLOAD_BASE = "https://chat.googleapis.com/upload/v1";
 
 async function bearerToken(): Promise<string> {
-  const client = await auth.getClient();
-  const { token } = await client.getAccessToken();
+  const { token } = await oauthClient.getAccessToken();
   if (!token) throw new AppError(500, "Failed to get auth token.", "CHAT_AUTH_TOKEN_FAILED");
   return token;
 }
