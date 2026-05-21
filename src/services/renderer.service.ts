@@ -19,9 +19,9 @@ const WHITE = "#ffffff";
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
   title:       { x: 44,  y: 218, width: 504, fontSize: 70,  lineHeight: 1.05, letterSpacing: -2   },
-  link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: -2 },
+  link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0  },
   timeRowGapY: 39,
-  timeRow:     { x: 75,  fontSize: 21, iconSize: 22, dateOffsetX: 174, letterSpacing: -2 },
+  timeRow:     { x: 75,  fontSize: 21, iconSize: 22, dateOffsetX: 174, letterSpacing: 0  },
   photo:       { x: 557, y: 340, width: 506, height: 515,   cornerRadius: 22 },
   badge:       { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
   name:        { x: 572, width: 492, fontSize: 25, lineHeight: 1.2, letterSpacing: -2 },
