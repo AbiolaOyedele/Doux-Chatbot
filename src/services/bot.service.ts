@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatAttachment } from "../types/chat";
+import type { ChatEvent, ChatAttachment, ChatSpace } from "../types/chat";
 import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
@@ -82,6 +82,16 @@ function extractEventParts(event: ChatEvent) {
     message:   event.message,
     space:     event.space,
   };
+}
+
+// ── Space helpers ─────────────────────────────────────────────────────────────
+
+function isDm(space: ChatSpace): boolean {
+  return !!(
+    space.singleUserBotDm ||
+    space.type === "DIRECT_MESSAGE" ||
+    space.spaceType === "DIRECT_MESSAGE"
+  );
 }
 
 // ── Render and post ───────────────────────────────────────────────────────────
@@ -173,11 +183,10 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
     } else {
       // Text only — store and wait for photo
       storePending(spaceName, parseResult.briefing);
-      await postTextMessage(
-        spaceName,
-        "Got the details! Now send the speaker's photo and I'll generate the flyer. 🎨",
-        threadName,
-      );
+      const photoPrompt = isDm(space)
+        ? "Got the details! Now send the speaker's photo and I'll generate the flyer. 🎨"
+        : "Got the details! Now @mention me and attach the speaker's photo in the same message and I'll generate the flyer. 🎨";
+      await postTextMessage(spaceName, photoPrompt, threadName);
     }
   }
 }
