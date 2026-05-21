@@ -10,12 +10,14 @@ const FIELD_LABELS: Record<string, string> = {
   link:       "Link",
 };
 
-const EXTRACTION_PROMPT = `You are extracting structured fields from a Google Chat message sent to a flyer-generation bot.
+function buildExtractionPrompt(): string {
+  const currentYear = new Date().getFullYear();
+  return `You are extracting structured fields from a Google Chat message sent to a flyer-generation bot.
 
 Extract these fields and return ONLY a valid JSON object with exactly these keys:
 - handle: The speaker's Twitter/X handle (keep the @ if present, otherwise add it)
 - time: The event time exactly as written (e.g. "8pm", "7:30 PM")
-- date: The event date exactly as written (e.g. "May 15", "Friday 20th")
+- date: The event date. If the year is omitted, append ${currentYear} (e.g. "May 15" → "May 15, ${currentYear}")
 - occupation: The speaker's job title or professional role
 - topic: The talk title or topic being discussed
 - link: A full URL starting with http (registration, event, or speaker page)
@@ -24,6 +26,7 @@ Rules:
 - Set a field to null if it cannot be found in the message
 - Do not invent or guess values — only extract what is explicitly stated
 - Return only the JSON object, no explanation, no markdown fences`;
+}
 
 export async function parseBriefing(rawText: string): Promise<ParseResult> {
   // Strip leading @mention (e.g. "@DesignBot " prepended by Chat)
@@ -40,7 +43,7 @@ export async function parseBriefing(rawText: string): Promise<ParseResult> {
       model: "claude-haiku-4-5",
       max_tokens: 512,
       messages: [
-        { role: "user", content: `${EXTRACTION_PROMPT}\n\nMessage:\n${text}` },
+        { role: "user", content: `${buildExtractionPrompt()}\n\nMessage:\n${text}` },
       ],
     });
 
