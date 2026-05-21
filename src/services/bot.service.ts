@@ -298,6 +298,8 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
   );
   const hasText = bodyText.length > 0;
 
+  console.log(`[bot] event: hasText=${hasText}, hasImage=${!!imageAttachment}, body="${bodyText.slice(0, 80)}"`);
+
   // ── Photo only (tagged with image, no text) ───────────────────────────────
   if (imageAttachment && !hasText) {
     cancelPendingScan(spaceName);
