@@ -18,21 +18,42 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:       { x: 44,  y: 218, width: 504, fontSize: 70,  lineHeight: 1.15 },
-  link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 18, paddingLeft: 24 },
+  title:       { x: 44,  y: 218, width: 504, fontSize: 70,  lineHeight: 1.05, letterSpacing: -2   },
+  link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: -2 },
   timeRowGapY: 39,
-  timeRow:     { x: 50,  fontSize: 17, iconSize: 22, dateOffsetX: 200 },
-  photo:       { x: 557, y: 340, width: 509, height: 522,   cornerRadius: 22 },
-  badge:       { offsetX: 1, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
-  name:        { x: 570, width: 492, fontSize: 25, lineHeight: 1.2 },
-  role:        { x: 570, width: 492, fontSize: 18, lineHeight: 1.2 },
+  timeRow:     { x: 75,  fontSize: 21, iconSize: 22, dateOffsetX: 174, letterSpacing: -2 },
+  photo:       { x: 557, y: 340, width: 506, height: 515,   cornerRadius: 22 },
+  badge:       { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
+  name:        { x: 572, width: 492, fontSize: 25, lineHeight: 1.2, letterSpacing: -2 },
+  role:        { x: 570, width: 492, fontSize: 18, lineHeight: 1.2, letterSpacing: -2 },
 } as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type Ctx = ReturnType<ReturnType<typeof createCanvas>["getContext"]>;
 
-function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number): string[] {
+function measureWithSpacing(ctx: Ctx, text: string, letterSpacing: number): number {
+  if (letterSpacing === 0) return ctx.measureText(text).width;
+  return ctx.measureText(text).width + (text.length - 1) * letterSpacing;
+}
+
+function fillTextSpaced(ctx: Ctx, text: string, x: number, y: number, letterSpacing: number): void {
+  if (letterSpacing === 0) { ctx.fillText(text, x, y); return; }
+  let cx = x;
+  for (const char of text) {
+    ctx.fillText(char, cx, y);
+    cx += ctx.measureText(char).width + letterSpacing;
+  }
+}
+
+function fillTextSpacedCentered(ctx: Ctx, text: string, cx: number, cy: number, letterSpacing: number): void {
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  const totalWidth = measureWithSpacing(ctx, text, letterSpacing);
+  fillTextSpaced(ctx, text, cx - totalWidth / 2, cy, letterSpacing);
+}
+
+function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
   if (!text.trim()) return [text];
   ctx.font = `${fontStyle} ${fontSize}px "${FONT}"`;
   const words = text.split(" ");
@@ -40,7 +61,7 @@ function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, m
   let current = "";
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (ctx.measureText(candidate).width > maxWidth && current !== "") {
+    if (measureWithSpacing(ctx, candidate, letterSpacing) > maxWidth && current !== "") {
       lines.push(current);
       current = word;
     } else {
@@ -124,14 +145,15 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   // ── Title with auto-split (last 2 lines → teal) ───────────────────────────
   const { title } = F;
-  const titleLines = wordWrap(ctx, briefing.topic, title.fontSize, "bold", title.width);
+  const TITLE_SPACING = F.title.letterSpacing;
+  const titleLines = wordWrap(ctx, briefing.topic, title.fontSize, "bold", title.width, TITLE_SPACING);
   const splitAt = Math.max(0, titleLines.length - 2);
   const titleLineH = title.fontSize * title.lineHeight;
 
   ctx.font = `bold ${title.fontSize}px "${FONT}"`;
   titleLines.forEach((line, i) => {
     ctx.fillStyle = i < splitAt ? WHITE : ACCENT;
-    ctx.fillText(line, title.x, title.y + i * titleLineH);
+    fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
   });
 
   const titleH = titleLines.length * titleLineH;
@@ -151,7 +173,7 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   ctx.font = `bold ${link.fontSize}px "${FONT}"`;
   ctx.fillStyle = WHITE;
   ctx.textBaseline = "middle";
-  ctx.fillText(`→  ${briefing.link}`, link.x + link.paddingLeft, linkY + link.height / 2);
+  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, linkY + link.height / 2, link.letterSpacing);
   ctx.restore();
 
   ctx.textBaseline = "top";
@@ -167,13 +189,13 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   if (briefing.time) {
     drawClockIcon(ctx, timeRow.x, timeY + iconOffsetY, iconSize, WHITE);
-    ctx.fillText(briefing.time, timeRow.x + iconSize + 10, timeY);
+    fillTextSpaced(ctx, briefing.time, timeRow.x + iconSize + 10, timeY, timeRow.letterSpacing);
   }
 
   if (briefing.date) {
     const dateX = timeRow.x + timeRow.dateOffsetX;
     drawCalendarIcon(ctx, dateX, timeY + iconOffsetY, iconSize, WHITE);
-    ctx.fillText(briefing.date, dateX + iconSize + 10, timeY);
+    fillTextSpaced(ctx, briefing.date, dateX + iconSize + 10, timeY, timeRow.letterSpacing);
   }
 
   // ── Speaker photo (center crop + rounded clip) ────────────────────────────
@@ -208,9 +230,7 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   ctx.fillStyle = "#0a0d0b";
   ctx.font = `bold ${badge.fontSize}px "${FONT}"`;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "center";
-  ctx.fillText("SPEAKER", badgeX + badge.width / 2, badgeY + badge.height / 2);
+  fillTextSpacedCentered(ctx, "SPEAKER", badgeX + badge.width / 2, badgeY + badge.height / 2, 1.5);
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
 
@@ -220,10 +240,10 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   ctx.fillStyle = WHITE;
   ctx.font = `bold ${name.fontSize}px "${FONT}"`;
-  const nameLines = wordWrap(ctx, briefing.handle, name.fontSize, "bold", name.width);
+  const nameLines = wordWrap(ctx, briefing.handle, name.fontSize, "bold", name.width, name.letterSpacing);
   ctx.textAlign = "center";
   nameLines.forEach((line, i) => {
-    ctx.fillText(line, name.x + name.width / 2, nameY + i * name.fontSize * name.lineHeight);
+    fillTextSpacedCentered(ctx, line, name.x + name.width / 2, nameY + i * name.fontSize * name.lineHeight + name.fontSize / 2, name.letterSpacing);
   });
 
   // ── Speaker role (centered under name) ───────────────────────────────────
@@ -232,9 +252,9 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   ctx.fillStyle = WHITE;
   ctx.font = `bold ${role.fontSize}px "${FONT}"`;
-  const roleLines = wordWrap(ctx, briefing.occupation, role.fontSize, "bold", role.width);
+  const roleLines = wordWrap(ctx, briefing.occupation, role.fontSize, "bold", role.width, role.letterSpacing);
   roleLines.forEach((line, i) => {
-    ctx.fillText(line, role.x + role.width / 2, roleY + i * role.fontSize * role.lineHeight);
+    fillTextSpacedCentered(ctx, line, role.x + role.width / 2, roleY + i * role.fontSize * role.lineHeight + role.fontSize / 2, role.letterSpacing);
   });
 
   ctx.textAlign = "left";
