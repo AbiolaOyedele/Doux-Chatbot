@@ -123,9 +123,16 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
   const spaceName  = message.space?.name ?? space.name;
   const threadName = message.thread.name;
 
+  // Accept both directly-uploaded images and Drive-attached images
   const imageAttachment = message.attachment?.find(
-    (a) => a.source === "UPLOADED_CONTENT" && a.contentType.startsWith("image/"),
+    (a) => a.contentType.startsWith("image/"),
   );
+
+  if (message.attachment?.length) {
+    console.log("[bot] attachments:", JSON.stringify(message.attachment.map(
+      (a) => ({ source: a.source, contentType: a.contentType }),
+    )));
+  }
 
   // Non-trivial text: message has content beyond the @mention prefix
   const bodyText = (message.text ?? "").replace(/^@\S+\s*/m, "").trim();
