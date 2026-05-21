@@ -18,7 +18,7 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:        { x: 42,  y: 222, width: 494, height: 294,  fontSize: 280, lineHeight: 1.05, letterSpacing: -2 },
+  title:        { x: 42,  y: 222, width: 494, height: 400,  fontSize: 380, lineHeight: 1.05, letterSpacing: -2 },
   link:         { x: 44,  y: 630, width: 490, height: 54,   cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0 },
   clockIcon:    { x: 72,  y: 718 },
   time:         { x: 102, y: 719 },
