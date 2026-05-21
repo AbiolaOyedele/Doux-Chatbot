@@ -56,7 +56,7 @@ export async function postFlyerMessage(
   threadName?: string,
 ): Promise<void> {
   await chatPost(`${spaceName}/messages`, {
-    text: "Flyer generated ✅",
+    text: "Flyer generated ✌🏽",
     ...(threadName ? { thread: { name: threadName } } : {}),
     cardsV2: [
       {
@@ -143,7 +143,7 @@ export async function postFlyerAsFile(
   const { attachmentUploadToken } = await uploadAttachment(spaceName, pngBuffer, filename, "image/png");
 
   await chatPost(`${spaceName}/messages`, {
-    text: "Flyer generated ✅",
+    text: "Flyer generated ✌🏽",
     ...(threadName ? { thread: { name: threadName } } : {}),
     attachment: [
       {
