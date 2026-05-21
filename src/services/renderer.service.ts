@@ -18,17 +18,17 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:        { x: 44,  y: 223, width: 494, height: 294,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2 },
+  title:        { x: 42,  y: 222, width: 494, height: 294,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2 },
   link:         { x: 44,  y: 630, width: 490, height: 54,   cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0 },
   clockIcon:    { x: 72,  y: 718 },
-  time:         { x: 108, y: 719 },
-  calendarIcon: { x: 251, y: 718 },
+  time:         { x: 102, y: 719 },
+  calendarIcon: { x: 252, y: 718 },
   date:         { x: 281, y: 718 },
   timeRow:      { fontSize: 18, iconSize: 22, letterSpacing: 0 },
   photo:        { x: 557, y: 340, width: 506, height: 515,  cornerRadius: 22 },
   badge:        { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
   name:         { x: 567, y: 889, width: 492, fontSize: 25, lineHeight: 1.2, letterSpacing: -1 },
-  role:         { x: 569, y: 922, width: 492, fontSize: 18, lineHeight: 1.2, letterSpacing: -2 },
+  role:         { x: 569, y: 922, width: 492, fontSize: 18, lineHeight: 1.2, letterSpacing: 0 },
 } as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
