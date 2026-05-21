@@ -18,7 +18,7 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:       { x: 44,  y: 218, width: 504, fontSize: 70,  lineHeight: 1.05, letterSpacing: -2   },
+  title:       { x: 44,  y: 218, width: 504, height: 292,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2   },
   link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0  },
   timeRowGapY: 39,
   timeRow:     { x: 75,  fontSize: 21, iconSize: 22, dateOffsetX: 174, letterSpacing: 0  },
@@ -51,6 +51,22 @@ function fillTextSpacedCentered(ctx: Ctx, text: string, cx: number, cy: number, 
   ctx.textAlign = "left";
   const totalWidth = measureWithSpacing(ctx, text, letterSpacing);
   fillTextSpaced(ctx, text, cx - totalWidth / 2, cy, letterSpacing);
+}
+
+function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number, maxHeight: number, maxFS: number, lineHeight: number, minFS = 18): number {
+  if (!text.trim()) return maxFS;
+  for (let fs = maxFS; fs >= minFS; fs--) {
+    ctx.font = `${fontStyle} ${fs}px "${FONT}"`;
+    const words = text.split(" ");
+    let lines = 1, current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width > maxWidth && current !== "") { lines++; current = word; }
+      else { current = candidate; }
+    }
+    if (lines * fs * lineHeight <= maxHeight) return fs;
+  }
+  return minFS;
 }
 
 function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
@@ -143,24 +159,23 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
 
   ctx.textBaseline = "top";
 
-  // ── Title with auto-split (last 2 lines → teal) ───────────────────────────
+  // ── Title with auto-shrink + split (last 2 lines → teal) ────────────────
   const { title } = F;
   const TITLE_SPACING = F.title.letterSpacing;
-  const titleLines = wordWrap(ctx, briefing.topic, title.fontSize, "bold", title.width, TITLE_SPACING);
+  const actualTitleFS = fitFontSize(ctx, briefing.topic, "bold", title.width, title.height, title.fontSize, title.lineHeight);
+  const titleLines = wordWrap(ctx, briefing.topic, actualTitleFS, "bold", title.width, TITLE_SPACING);
   const splitAt = Math.max(0, titleLines.length - 2);
-  const titleLineH = title.fontSize * title.lineHeight;
+  const titleLineH = actualTitleFS * title.lineHeight;
 
-  ctx.font = `bold ${title.fontSize}px "${FONT}"`;
+  ctx.font = `bold ${actualTitleFS}px "${FONT}"`;
   titleLines.forEach((line, i) => {
     ctx.fillStyle = i < splitAt ? WHITE : ACCENT;
     fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
   });
 
-  const titleH = titleLines.length * titleLineH;
-
-  // ── Link pill ─────────────────────────────────────────────────────────────
+  // ── Link pill — fixed y based on title zone, not title text height ────────
   const { link } = F;
-  const linkY = title.y + titleH + 28;
+  const linkY = title.y + title.height + 28;
 
   roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
