@@ -155,6 +155,27 @@ export async function postFlyerAsFile(
   });
 }
 
+export async function fetchThreadMessages(
+  spaceName: string,
+  threadName: string,
+): Promise<import("../types/chat").ChatMessage[]> {
+  const token = await bearerToken();
+  // filter param uses the EBNF filter syntax supported by the Chat API
+  const filter = `thread.name = "${threadName}"`;
+  const url =
+    `${CHAT_BASE}/${spaceName}/messages` +
+    `?filter=${encodeURIComponent(filter)}&orderBy=createTime%20desc&pageSize=20`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    // Degrade gracefully — missing scope or transient failure should not crash the bot
+    console.error("[chat] fetchThreadMessages failed:", res.status, await res.text().catch(() => ""));
+    return [];
+  }
+  const data = (await res.json()) as { messages?: import("../types/chat").ChatMessage[] };
+  return data.messages ?? [];
+}
+
 export async function downloadAttachment(resourceName: string): Promise<Buffer> {
   const token = await bearerToken();
   // Google Chat media download uses a dedicated /media/ endpoint, distinct

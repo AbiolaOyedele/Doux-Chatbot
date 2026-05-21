@@ -2,7 +2,7 @@ import type { ChatEvent, ChatAttachment, ChatSpace } from "../types/chat";
 import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
-import { downloadAttachment, postTextMessage, postFlyerAsFile } from "../lib/google-chat";
+import { downloadAttachment, postTextMessage, postFlyerAsFile, fetchThreadMessages } from "../lib/google-chat";
 import { isAppError } from "../lib/errors";
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -118,6 +118,37 @@ async function renderAndPost(
   }
 }
 
+// ── Thread context scanner ────────────────────────────────────────────────────
+
+interface ThreadContext {
+  textContent: string | null;
+  imageAttachment: import("../types/chat").ChatAttachment | null;
+}
+
+async function scanThread(spaceName: string, threadName: string): Promise<ThreadContext> {
+  const messages = await fetchThreadMessages(spaceName, threadName);
+  const humanMessages = messages.filter((m) => m.sender.type !== "BOT");
+
+  // Most-recent message with text content (strip mention tokens)
+  const textMsg = humanMessages.find((m) => {
+    const t = (m.argumentText ?? m.text ?? "").replace(/<users\/[^>]+>\s*/g, "").trim();
+    return t.length > 0;
+  });
+  const textContent = textMsg
+    ? (textMsg.argumentText?.trim() ||
+       (textMsg.text ?? "").replace(/<users\/[^>]+>\s*/g, "").replace(/^@\S+\s*/m, "").trim()) || null
+    : null;
+
+  // Most-recent message with an image attachment
+  const imgMsg = humanMessages.find((m) =>
+    m.attachment?.some((a) => a.contentType.startsWith("image/")),
+  );
+  const imageAttachment =
+    imgMsg?.attachment?.find((a) => a.contentType.startsWith("image/")) ?? null;
+
+  return { textContent, imageAttachment };
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function handleChatEvent(event: ChatEvent): Promise<void> {
@@ -152,22 +183,66 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
   );
   const hasText = bodyText.length > 0;
 
-  // ── Photo only: look up a pending briefing from a previous message ─────────
+  // ── Photo only (tagged with image, no text) ───────────────────────────────
   if (imageAttachment && !hasText) {
+    // 1. Check in-memory pending briefing (user sent text earlier this session)
     const pending = consumePending(spaceName);
-    if (!pending) {
-      await postTextMessage(
-        spaceName,
-        `I don't have any briefing details for this space yet.\n\n${FORMAT_HINT}`,
-        threadName,
-      );
+    if (pending) {
+      await renderAndPost(spaceName, threadName, pending, imageAttachment);
       return;
     }
-    await renderAndPost(spaceName, threadName, pending, imageAttachment);
+    // 2. Fall back: scan the thread for a message that has briefing text
+    const { textContent } = await scanThread(spaceName, threadName);
+    if (textContent) {
+      const parseResult = await parseBriefing(textContent);
+      if (parseResult.ok) {
+        await renderAndPost(spaceName, threadName, parseResult.briefing, imageAttachment);
+        return;
+      }
+    }
+    await postTextMessage(
+      spaceName,
+      `I don't have any briefing details for this space yet.\n\n${FORMAT_HINT}`,
+      threadName,
+    );
     return;
   }
 
-  // ── Text (with or without photo) ──────────────────────────────────────────
+  // ── Tagged with no text and no image — scan the thread for everything ─────
+  if (!hasText && !imageAttachment) {
+    const { textContent, imageAttachment: threadImg } = await scanThread(spaceName, threadName);
+
+    if (!textContent && !threadImg) {
+      await postTextMessage(spaceName, FORMAT_HINT, threadName);
+      return;
+    }
+
+    let briefingFromThread = null;
+    if (textContent) {
+      const parseResult = await parseBriefing(textContent);
+      if (parseResult.ok) briefingFromThread = parseResult.briefing;
+    }
+
+    if (briefingFromThread && threadImg) {
+      // Found everything in the thread — generate immediately
+      await renderAndPost(spaceName, threadName, briefingFromThread, threadImg);
+    } else if (briefingFromThread) {
+      storePending(spaceName, briefingFromThread);
+      const photoPrompt = isDm(space)
+        ? "Got the details from the thread! Now send the speaker's photo and I'll generate the flyer. 🎨"
+        : "Got the details from the thread! Now @mention me and attach the speaker's photo and I'll generate the flyer. 🎨";
+      await postTextMessage(spaceName, photoPrompt, threadName);
+    } else {
+      await postTextMessage(
+        spaceName,
+        `I found a message in the thread but couldn't extract all the details I need.\n\n${FORMAT_HINT}`,
+        threadName,
+      );
+    }
+    return;
+  }
+
+  // ── Text (with or without photo in same message) ──────────────────────────
   if (hasText) {
     const parseResult = await parseBriefing(bodyText);
 
