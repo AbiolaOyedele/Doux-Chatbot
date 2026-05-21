@@ -240,7 +240,8 @@ async function scanSpace(spaceName: string, senderName: string): Promise<ThreadC
     (m) => m.sender.type !== "BOT" && m.sender.name === senderName,
   );
 
-  console.log(`[bot] scanSpace: ${messages.length} total, ${senderMessages.length} from sender ${senderName}`);
+  const uniqueSenders = [...new Set(messages.filter(m => m.sender.type !== "BOT").map(m => m.sender.name))];
+  console.log(`[bot] scanSpace: ${messages.length} total, ${senderMessages.length} from sender ${senderName}, human senders seen: ${JSON.stringify(uniqueSenders)}`);
 
   // Most-recent message from this sender with text content
   const textMsg = senderMessages.find((m) => {
@@ -299,14 +300,10 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
 
   // ── Photo only (tagged with image, no text) ───────────────────────────────
   if (imageAttachment && !hasText) {
-    cancelPendingScan(spaceName); // user is actively engaging — cancel the wait timer
-    // 1. Check in-memory pending briefing (user sent text earlier this session)
-    const pending = consumePending(spaceName);
-    if (pending) {
-      await renderAndPost(spaceName, threadName, pending, imageAttachment);
-      return;
-    }
-    // 2. Fall back: scan the space for a recent message from this sender with briefing text
+    cancelPendingScan(spaceName);
+
+    // 1. Scan the space first — stateless, survives server restarts.
+    //    Find the most recent text briefing from this sender.
     const { textContent } = await scanSpace(spaceName, message.sender.name);
     if (textContent) {
       const parseResult = await parseBriefing(textContent);
@@ -314,7 +311,23 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
         await renderAndPost(spaceName, threadName, parseResult.briefing, imageAttachment);
         return;
       }
+      // Found a message but couldn't extract all required fields
+      const fieldList = parseResult.missingFields.map((f) => `• ${f}`).join("\n");
+      await postTextMessage(
+        spaceName,
+        `I found your message but couldn't extract everything I need:\n${fieldList}\n\n${FORMAT_HINT}`,
+        threadName,
+      );
+      return;
     }
+
+    // 2. Fall back to in-memory pending briefing (same server session, no restart)
+    const pending = consumePending(spaceName);
+    if (pending) {
+      await renderAndPost(spaceName, threadName, pending, imageAttachment);
+      return;
+    }
+
     await postTextMessage(
       spaceName,
       `I don't have any briefing details for this space yet.\n\n${FORMAT_HINT}`,
