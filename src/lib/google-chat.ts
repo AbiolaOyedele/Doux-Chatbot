@@ -155,21 +155,22 @@ export async function postFlyerAsFile(
   });
 }
 
-export async function fetchThreadMessages(
+/**
+ * Fetches the most recent messages in a space (not filtered by thread).
+ * Degrades gracefully to [] on auth/scope failures so the bot still works without it.
+ */
+export async function fetchRecentSpaceMessages(
   spaceName: string,
-  threadName: string,
+  limit = 30,
 ): Promise<import("../types/chat").ChatMessage[]> {
   const token = await bearerToken();
-  // filter param uses the EBNF filter syntax supported by the Chat API
-  const filter = `thread.name = "${threadName}"`;
   const url =
     `${CHAT_BASE}/${spaceName}/messages` +
-    `?filter=${encodeURIComponent(filter)}&orderBy=createTime%20desc&pageSize=20`;
+    `?orderBy=createTime%20desc&pageSize=${limit}`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
-    // Degrade gracefully — missing scope or transient failure should not crash the bot
-    console.error("[chat] fetchThreadMessages failed:", res.status, await res.text().catch(() => ""));
+    console.error("[chat] fetchRecentSpaceMessages failed:", res.status, await res.text().catch(() => ""));
     return [];
   }
   const data = (await res.json()) as { messages?: import("../types/chat").ChatMessage[] };

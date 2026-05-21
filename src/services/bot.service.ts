@@ -2,7 +2,7 @@ import type { ChatEvent, ChatAttachment, ChatSpace } from "../types/chat";
 import type { ParsedBriefing } from "../types/briefing";
 import { parseBriefing } from "./parser.service";
 import { renderFlyer } from "./renderer.service";
-import { downloadAttachment, postTextMessage, postFlyerAsFile, fetchThreadMessages } from "../lib/google-chat";
+import { downloadAttachment, postTextMessage, postFlyerAsFile, fetchRecentSpaceMessages } from "../lib/google-chat";
 import { isAppError } from "../lib/errors";
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
@@ -125,12 +125,23 @@ interface ThreadContext {
   imageAttachment: import("../types/chat").ChatAttachment | null;
 }
 
-async function scanThread(spaceName: string, threadName: string): Promise<ThreadContext> {
-  const messages = await fetchThreadMessages(spaceName, threadName);
-  const humanMessages = messages.filter((m) => m.sender.type !== "BOT");
+/**
+ * Scans the most recent messages in the space from the same sender who tagged
+ * the bot. Thread-scoped scanning doesn't work because the tag and the content
+ * message are almost always in different threads in a space.
+ */
+async function scanSpace(spaceName: string, senderName: string): Promise<ThreadContext> {
+  const messages = await fetchRecentSpaceMessages(spaceName);
 
-  // Most-recent message with text content (strip mention tokens)
-  const textMsg = humanMessages.find((m) => {
+  // Only consider messages from the same person who tagged the bot (ignore other users' conversations)
+  const senderMessages = messages.filter(
+    (m) => m.sender.type !== "BOT" && m.sender.name === senderName,
+  );
+
+  console.log(`[bot] scanSpace: ${messages.length} total, ${senderMessages.length} from sender ${senderName}`);
+
+  // Most-recent message from this sender with text content
+  const textMsg = senderMessages.find((m) => {
     const t = (m.argumentText ?? m.text ?? "").replace(/<users\/[^>]+>\s*/g, "").trim();
     return t.length > 0;
   });
@@ -139,13 +150,14 @@ async function scanThread(spaceName: string, threadName: string): Promise<Thread
        (textMsg.text ?? "").replace(/<users\/[^>]+>\s*/g, "").replace(/^@\S+\s*/m, "").trim()) || null
     : null;
 
-  // Most-recent message with an image attachment
-  const imgMsg = humanMessages.find((m) =>
+  // Most-recent message from this sender with an image attachment
+  const imgMsg = senderMessages.find((m) =>
     m.attachment?.some((a) => a.contentType.startsWith("image/")),
   );
   const imageAttachment =
     imgMsg?.attachment?.find((a) => a.contentType.startsWith("image/")) ?? null;
 
+  console.log(`[bot] scanSpace result: textContent=${!!textContent}, image=${!!imageAttachment}`);
   return { textContent, imageAttachment };
 }
 
@@ -191,8 +203,8 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
       await renderAndPost(spaceName, threadName, pending, imageAttachment);
       return;
     }
-    // 2. Fall back: scan the thread for a message that has briefing text
-    const { textContent } = await scanThread(spaceName, threadName);
+    // 2. Fall back: scan the space for a recent message from this sender with briefing text
+    const { textContent } = await scanSpace(spaceName, message.sender.name);
     if (textContent) {
       const parseResult = await parseBriefing(textContent);
       if (parseResult.ok) {
@@ -210,7 +222,7 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
 
   // ── Tagged with no text and no image — scan the thread for everything ─────
   if (!hasText && !imageAttachment) {
-    const { textContent, imageAttachment: threadImg } = await scanThread(spaceName, threadName);
+    const { textContent, imageAttachment: threadImg } = await scanSpace(spaceName, message.sender.name);
 
     if (!textContent && !threadImg) {
       await postTextMessage(spaceName, FORMAT_HINT, threadName);
