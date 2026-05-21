@@ -40,6 +40,8 @@ export interface ChatMessage {
   thread: ChatThread;
   attachment?: ChatAttachment[];
   argumentText?: string;
+  /** ISO 8601 timestamp — present on messages returned by the list API */
+  createTime?: string;
 }
 
 // Add-on event (what Google actually sends via Pub/Sub)

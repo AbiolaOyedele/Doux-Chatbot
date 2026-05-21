@@ -43,6 +43,108 @@ function consumePending(spaceName: string): ParsedBriefing | null {
   return entry.briefing;
 }
 
+// ── Delayed space scans (tagged with no content; wait for user to post) ──────
+// Google Chat only delivers webhook events on @mention in spaces, so if the
+// user tags the bot first and then posts content WITHOUT re-tagging, the bot
+// normally misses it. We schedule a 2-minute re-scan to catch that window.
+
+interface PendingScanEntry {
+  senderName: string;
+  threadName: string;
+  taggedAt: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const SCAN_DELAY_MS = 120_000; // 2 minutes
+const pendingScans = new Map<string, PendingScanEntry>();
+
+function cancelPendingScan(spaceName: string): void {
+  const entry = pendingScans.get(spaceName);
+  if (entry) {
+    clearTimeout(entry.timer);
+    pendingScans.delete(spaceName);
+  }
+}
+
+async function runDelayedScan(
+  spaceName: string,
+  senderName: string,
+  threadName: string,
+  taggedAt: number,
+): Promise<void> {
+  pendingScans.delete(spaceName);
+
+  const messages = await fetchRecentSpaceMessages(spaceName);
+
+  // Only messages from the same sender posted AFTER they tagged the bot
+  const newMessages = messages.filter((m) => {
+    if (m.sender.type === "BOT" || m.sender.name !== senderName) return false;
+    if (!m.createTime) return true; // no timestamp — conservative, include it
+    return new Date(m.createTime).getTime() > taggedAt;
+  });
+
+  console.log(`[bot] delayed scan: ${newMessages.length} new messages from ${senderName}`);
+  if (newMessages.length === 0) return; // format hint was already sent in the initial reply
+
+  const textMsg = newMessages.find((m) => {
+    const t = (m.argumentText ?? m.text ?? "").replace(/<users\/[^>]+>\s*/g, "").trim();
+    return t.length > 0;
+  });
+  const textContent = textMsg
+    ? (textMsg.argumentText?.trim() ||
+       (textMsg.text ?? "").replace(/<users\/[^>]+>\s*/g, "").trim()) || null
+    : null;
+
+  const imgMsg = newMessages.find((m) =>
+    m.attachment?.some((a) => a.contentType.startsWith("image/")),
+  );
+  const imageAttachment =
+    imgMsg?.attachment?.find((a) => a.contentType.startsWith("image/")) ?? null;
+
+  console.log(`[bot] delayed scan result: text=${!!textContent}, image=${!!imageAttachment}`);
+
+  if (!textContent && !imageAttachment) return;
+
+  let briefing: ParsedBriefing | null = null;
+  if (textContent) {
+    const parseResult = await parseBriefing(textContent);
+    if (parseResult.ok) briefing = parseResult.briefing;
+  }
+
+  try {
+    if (briefing && imageAttachment) {
+      await renderAndPost(spaceName, threadName, briefing, imageAttachment);
+    } else if (briefing) {
+      storePending(spaceName, briefing);
+      await postTextMessage(
+        spaceName,
+        "Got the details! Now @mention me and attach the speaker's photo and I'll generate the flyer. 🎨",
+        threadName,
+      );
+    } else {
+      await postTextMessage(
+        spaceName,
+        `I found a message but couldn't extract all the details I need.\n\n${FORMAT_HINT}`,
+        threadName,
+      );
+    }
+  } catch (err) {
+    const msg = isAppError(err) ? err.message : "Something went wrong. Please try again.";
+    await postTextMessage(spaceName, msg, threadName).catch(() => undefined);
+    if (!isAppError(err)) console.error("[bot] delayed scan error:", err);
+  }
+}
+
+function scheduleScan(spaceName: string, senderName: string, threadName: string): void {
+  cancelPendingScan(spaceName); // replace any previous pending scan for this space
+  const taggedAt = Date.now();
+  const timer = setTimeout(() => {
+    void runDelayedScan(spaceName, senderName, threadName, taggedAt);
+  }, SCAN_DELAY_MS);
+  pendingScans.set(spaceName, { senderName, threadName, taggedAt, timer });
+  console.log(`[bot] scheduled delayed scan for ${spaceName} in ${SCAN_DELAY_MS / 1000}s`);
+}
+
 // ── Format hint ───────────────────────────────────────────────────────────────
 
 const FORMAT_HINT = [
@@ -197,6 +299,7 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
 
   // ── Photo only (tagged with image, no text) ───────────────────────────────
   if (imageAttachment && !hasText) {
+    cancelPendingScan(spaceName); // user is actively engaging — cancel the wait timer
     // 1. Check in-memory pending briefing (user sent text earlier this session)
     const pending = consumePending(spaceName);
     if (pending) {
@@ -225,7 +328,13 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
     const { textContent, imageAttachment: threadImg } = await scanSpace(spaceName, message.sender.name);
 
     if (!textContent && !threadImg) {
-      await postTextMessage(spaceName, FORMAT_HINT, threadName);
+      // Nothing in the space yet — schedule a 2-min scan to catch content the
+      // user posts WITHOUT re-tagging the bot (scenario 2).
+      scheduleScan(spaceName, message.sender.name, threadName);
+      const waitMsg = isDm(space)
+        ? `Got it! Send me the briefing details when you're ready.\n\n${FORMAT_HINT}`
+        : `Got the tag! Drop the details in this space whenever you're ready — no need to @mention me again.\n\n${FORMAT_HINT}`;
+      await postTextMessage(spaceName, waitMsg, threadName);
       return;
     }
 
@@ -256,6 +365,7 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
 
   // ── Text (with or without photo in same message) ──────────────────────────
   if (hasText) {
+    cancelPendingScan(spaceName); // user provided content directly — no need to wait
     const parseResult = await parseBriefing(bodyText);
 
     if (!parseResult.ok) {
