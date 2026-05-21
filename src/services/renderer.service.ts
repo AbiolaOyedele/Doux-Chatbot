@@ -56,6 +56,22 @@ function fillTextSpacedCentered(ctx: Ctx, text: string, cx: number, cy: number, 
   fillTextSpaced(ctx, text, cx - totalWidth / 2, cy, letterSpacing);
 }
 
+function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number, maxHeight: number, maxFS: number, lineHeight: number, minFS = 18): number {
+  if (!text.trim()) return maxFS;
+  for (let fs = maxFS; fs >= minFS; fs--) {
+    ctx.font = `${fontStyle} ${fs}px "${FONT}"`;
+    const words = text.split(" ");
+    let lines = 1, current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width > maxWidth && current !== "") { lines++; current = word; }
+      else { current = candidate; }
+    }
+    if (lines * fs * lineHeight <= maxHeight) return fs;
+  }
+  return minFS;
+}
+
 function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
   if (!text.trim()) return [text];
   ctx.font = `${fontStyle} ${fontSize}px "${FONT}"`;
@@ -149,11 +165,12 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   // ── Title with auto-shrink + split (last 2 lines → teal) ────────────────
   const { title } = F;
   const TITLE_SPACING = F.title.letterSpacing;
-  const titleLines = wordWrap(ctx, briefing.topic, title.fontSize, "bold", title.width, TITLE_SPACING);
+  const actualTitleFS = fitFontSize(ctx, briefing.topic, "bold", title.width, title.height, title.fontSize, title.lineHeight);
+  const titleLines = wordWrap(ctx, briefing.topic, actualTitleFS, "bold", title.width, TITLE_SPACING);
   const splitAt = Math.max(0, titleLines.length - 2);
-  const titleLineH = title.fontSize * title.lineHeight;
+  const titleLineH = actualTitleFS * title.lineHeight;
 
-  ctx.font = `bold ${title.fontSize}px "${FONT}"`;
+  ctx.font = `bold ${actualTitleFS}px "${FONT}"`;
   titleLines.forEach((line, i) => {
     ctx.fillStyle = i < splitAt ? WHITE : ACCENT;
     fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
