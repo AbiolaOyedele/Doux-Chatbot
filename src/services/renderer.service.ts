@@ -58,6 +58,8 @@ function fillTextSpacedCentered(ctx: Ctx, text: string, cx: number, cy: number, 
 
 function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number, maxHeight: number, maxFS: number, lineHeight: number, minFS = 18): number {
   if (!text.trim()) return maxFS;
+  let bestFS = minFS;
+  let bestFill = 0;
   for (let fs = maxFS; fs >= minFS; fs--) {
     ctx.font = `${fontStyle} ${fs}px "${FONT}"`;
     const words = text.split(" ");
@@ -67,9 +69,10 @@ function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number
       if (ctx.measureText(candidate).width > maxWidth && current !== "") { lines++; current = word; }
       else { current = candidate; }
     }
-    if (lines * fs * lineHeight <= maxHeight) return fs;
+    const h = lines * fs * lineHeight;
+    if (h <= maxHeight && h > bestFill) { bestFill = h; bestFS = fs; }
   }
-  return minFS;
+  return bestFS;
 }
 
 function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
