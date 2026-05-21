@@ -144,9 +144,13 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
     )));
   }
 
-  // Non-trivial text: message has content beyond the @mention prefix
-  const bodyText = (message.text ?? "").replace(/^@\S+\s*/m, "").trim();
-  const hasText  = bodyText.length > 0;
+  // argumentText is pre-stripped of @mentions by Google Chat.
+  // Fall back to manual stripping of message.text for older event shapes.
+  const bodyText = (
+    message.argumentText?.trim() ||
+    (message.text ?? "").replace(/<users\/[^>]+>\s*/g, "").replace(/^@\S+\s*/m, "").trim()
+  );
+  const hasText = bodyText.length > 0;
 
   // ── Photo only: look up a pending briefing from a previous message ─────────
   if (imageAttachment && !hasText) {
@@ -165,7 +169,7 @@ export async function handleChatEvent(event: ChatEvent): Promise<void> {
 
   // ── Text (with or without photo) ──────────────────────────────────────────
   if (hasText) {
-    const parseResult = await parseBriefing(message.text);
+    const parseResult = await parseBriefing(bodyText);
 
     if (!parseResult.ok) {
       const fieldList = parseResult.missingFields.map((f) => `• ${f}`).join("\n");
