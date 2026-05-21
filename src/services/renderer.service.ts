@@ -18,14 +18,17 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:       { x: 44,  y: 218, width: 504, height: 292,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2   },
-  link:        { x: 44,          width: 490, height: 54,    cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0  },
-  timeRowGapY: 39,
-  timeRow:     { x: 75,  fontSize: 21, iconSize: 22, dateOffsetX: 174, letterSpacing: 0  },
-  photo:       { x: 557, y: 340, width: 506, height: 515,   cornerRadius: 22 },
-  badge:       { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
-  name:        { x: 572, width: 492, fontSize: 25, lineHeight: 1.2, letterSpacing: -2 },
-  role:        { x: 570, width: 492, fontSize: 18, lineHeight: 1.2, letterSpacing: -2 },
+  title:        { x: 44,  y: 218, width: 504, height: 294,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2 },
+  link:         { x: 44,  y: 540, width: 490, height: 54,   cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0 },
+  clockIcon:    { x: 75,  y: 631 },
+  time:         { x: 107, y: 631 },
+  calendarIcon: { x: 249, y: 631 },
+  date:         { x: 281, y: 631 },
+  timeRow:      { fontSize: 21, iconSize: 22, letterSpacing: 0 },
+  photo:        { x: 557, y: 340, width: 506, height: 515,  cornerRadius: 22 },
+  badge:        { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
+  name:         { x: 572, y: 875, width: 492, fontSize: 25, lineHeight: 1.2, letterSpacing: -2 },
+  role:         { x: 570, y: 902, width: 492, fontSize: 18, lineHeight: 1.2, letterSpacing: -2 },
 } as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -173,44 +176,40 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
     fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
   });
 
-  // ── Link pill — fixed y based on title zone, not title text height ────────
+  // ── Link pill — absolute position ────────────────────────────────────────
   const { link } = F;
-  const linkY = title.y + title.height + 28;
 
-  roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
+  roundedRectPath(ctx, link.x, link.y, link.width, link.height, link.cornerRadius);
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.save();
-  roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
+  roundedRectPath(ctx, link.x, link.y, link.width, link.height, link.cornerRadius);
   ctx.clip();
   ctx.font = `bold ${link.fontSize}px "${FONT}"`;
   ctx.fillStyle = WHITE;
   ctx.textBaseline = "middle";
-  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, linkY + link.height / 2, link.letterSpacing);
+  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, link.y + link.height / 2, link.letterSpacing);
   ctx.restore();
 
   ctx.textBaseline = "top";
 
-  // ── Time row ──────────────────────────────────────────────────────────────
-  const { timeRow, timeRowGapY } = F;
-  const timeY = linkY + link.height + timeRowGapY;
+  // ── Time / Date — absolute positions ─────────────────────────────────────
+  const { timeRow } = F;
   const { iconSize } = timeRow;
-  const iconOffsetY = -iconSize / 2 + timeRow.fontSize / 2 - 2;
 
   ctx.font = `bold ${timeRow.fontSize}px "${FONT}"`;
   ctx.fillStyle = WHITE;
 
   if (briefing.time) {
-    drawClockIcon(ctx, timeRow.x, timeY + iconOffsetY, iconSize, WHITE);
-    fillTextSpaced(ctx, briefing.time, timeRow.x + iconSize + 10, timeY, timeRow.letterSpacing);
+    drawClockIcon(ctx, F.clockIcon.x, F.clockIcon.y, iconSize, WHITE);
+    fillTextSpaced(ctx, briefing.time, F.time.x, F.time.y, timeRow.letterSpacing);
   }
 
   if (briefing.date) {
-    const dateX = timeRow.x + timeRow.dateOffsetX;
-    drawCalendarIcon(ctx, dateX, timeY + iconOffsetY, iconSize, WHITE);
-    fillTextSpaced(ctx, briefing.date, dateX + iconSize + 10, timeY, timeRow.letterSpacing);
+    drawCalendarIcon(ctx, F.calendarIcon.x, F.calendarIcon.y, iconSize, WHITE);
+    fillTextSpaced(ctx, briefing.date, F.date.x, F.date.y, timeRow.letterSpacing);
   }
 
   // ── Speaker photo (center crop + rounded clip) ────────────────────────────
@@ -249,27 +248,25 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
 
-  // ── Speaker name (bold, centered under photo) ─────────────────────────────
+  // ── Speaker name — absolute position ────────────────────────────────────
   const { name } = F;
-  const nameY = photo.y + photo.height + 20;
 
   ctx.fillStyle = WHITE;
   ctx.font = `bold ${name.fontSize}px "${FONT}"`;
   const nameLines = wordWrap(ctx, briefing.handle, name.fontSize, "bold", name.width, name.letterSpacing);
   ctx.textAlign = "center";
   nameLines.forEach((line, i) => {
-    fillTextSpacedCentered(ctx, line, name.x + name.width / 2, nameY + i * name.fontSize * name.lineHeight + name.fontSize / 2, name.letterSpacing);
+    fillTextSpacedCentered(ctx, line, name.x + name.width / 2, name.y + i * name.fontSize * name.lineHeight + name.fontSize / 2, name.letterSpacing);
   });
 
-  // ── Speaker role (centered under name) ───────────────────────────────────
+  // ── Speaker role — absolute position ─────────────────────────────────────
   const { role } = F;
-  const roleY = nameY + 46;
 
   ctx.fillStyle = WHITE;
   ctx.font = `bold ${role.fontSize}px "${FONT}"`;
   const roleLines = wordWrap(ctx, briefing.occupation, role.fontSize, "bold", role.width, role.letterSpacing);
   roleLines.forEach((line, i) => {
-    fillTextSpacedCentered(ctx, line, role.x + role.width / 2, roleY + i * role.fontSize * role.lineHeight + role.fontSize / 2, role.letterSpacing);
+    fillTextSpacedCentered(ctx, line, role.x + role.width / 2, role.y + i * role.fontSize * role.lineHeight + role.fontSize / 2, role.letterSpacing);
   });
 
   ctx.textAlign = "left";
