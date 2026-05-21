@@ -18,12 +18,12 @@ const WHITE = "#ffffff";
 
 // Dark-doux template field config — mirrors src/config/templates.ts in flyer-gen
 const F = {
-  title:        { x: 44,  y: 218, width: 504, height: 294,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2 },
-  link:         { x: 44,  y: 540, width: 490, height: 54,   cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0 },
+  title:        { x: 44,  y: 178, width: 494, height: 294,  fontSize: 70,  lineHeight: 1.05, letterSpacing: -2 },
+  link:         { x: 44,  y: 560, width: 490, height: 54,   cornerRadius: 27, fontSize: 21, paddingLeft: 24, letterSpacing: 0 },
   clockIcon:    { x: 75,  y: 631 },
-  time:         { x: 107, y: 631 },
+  time:         { x: 107, y: 630 },
   calendarIcon: { x: 249, y: 631 },
-  date:         { x: 281, y: 631 },
+  date:         { x: 281, y: 629 },
   timeRow:      { fontSize: 21, iconSize: 22, letterSpacing: 0 },
   photo:        { x: 557, y: 340, width: 506, height: 515,  cornerRadius: 22 },
   badge:        { offsetX: 4, offsetY: -23, width: 108, height: 34, fontSize: 15, cornerRadius: 17 },
@@ -54,22 +54,6 @@ function fillTextSpacedCentered(ctx: Ctx, text: string, cx: number, cy: number, 
   ctx.textAlign = "left";
   const totalWidth = measureWithSpacing(ctx, text, letterSpacing);
   fillTextSpaced(ctx, text, cx - totalWidth / 2, cy, letterSpacing);
-}
-
-function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number, maxHeight: number, maxFS: number, lineHeight: number, minFS = 18): number {
-  if (!text.trim()) return maxFS;
-  for (let fs = maxFS; fs >= minFS; fs--) {
-    ctx.font = `${fontStyle} ${fs}px "${FONT}"`;
-    const words = text.split(" ");
-    let lines = 1, current = "";
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (ctx.measureText(candidate).width > maxWidth && current !== "") { lines++; current = word; }
-      else { current = candidate; }
-    }
-    if (lines * fs * lineHeight <= maxHeight) return fs;
-  }
-  return minFS;
 }
 
 function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
@@ -165,12 +149,11 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   // ── Title with auto-shrink + split (last 2 lines → teal) ────────────────
   const { title } = F;
   const TITLE_SPACING = F.title.letterSpacing;
-  const actualTitleFS = fitFontSize(ctx, briefing.topic, "bold", title.width, title.height, title.fontSize, title.lineHeight);
-  const titleLines = wordWrap(ctx, briefing.topic, actualTitleFS, "bold", title.width, TITLE_SPACING);
+  const titleLines = wordWrap(ctx, briefing.topic, title.fontSize, "bold", title.width, TITLE_SPACING);
   const splitAt = Math.max(0, titleLines.length - 2);
-  const titleLineH = actualTitleFS * title.lineHeight;
+  const titleLineH = title.fontSize * title.lineHeight;
 
-  ctx.font = `bold ${actualTitleFS}px "${FONT}"`;
+  ctx.font = `bold ${title.fontSize}px "${FONT}"`;
   titleLines.forEach((line, i) => {
     ctx.fillStyle = i < splitAt ? WHITE : ACCENT;
     fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
