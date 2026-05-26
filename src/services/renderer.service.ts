@@ -170,7 +170,6 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   const TITLE_SPACING = F.title.letterSpacing;
   const actualTitleFS = fitFontSize(ctx, briefing.topic, "bold", title.width, title.height, title.fontSize, title.lineHeight);
   const titleLines = wordWrap(ctx, briefing.topic, actualTitleFS, "bold", title.width, TITLE_SPACING);
-  console.log(`[renderer] topic="${briefing.topic}" zone=${title.width}x${title.height} maxFS=${title.fontSize} actualFS=${actualTitleFS} lines=${titleLines.length}`);
   const splitAt = Math.max(0, titleLines.length - 2);
   const titleLineH = actualTitleFS * title.lineHeight;
 
@@ -180,26 +179,32 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
     fillTextSpaced(ctx, line, title.x, title.y + i * titleLineH, TITLE_SPACING);
   });
 
-  // ── Link pill — absolute position ────────────────────────────────────────
+  // Dynamic positions — link pill sits 24px below the last title line;
+  // clock/date row sits 34px below the link pill bottom.
+  const titleBottom  = title.y + titleLines.length * titleLineH;
+  const linkY        = Math.round(titleBottom + 24);
+  const clockRowY    = linkY + F.link.height + 34;
+
+  // ── Link pill ─────────────────────────────────────────────────────────────
   const { link } = F;
 
-  roundedRectPath(ctx, link.x, link.y, link.width, link.height, link.cornerRadius);
+  roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.save();
-  roundedRectPath(ctx, link.x, link.y, link.width, link.height, link.cornerRadius);
+  roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
   ctx.clip();
   ctx.font = `bold ${link.fontSize}px "${FONT}"`;
   ctx.fillStyle = WHITE;
   ctx.textBaseline = "middle";
-  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, link.y + link.height / 2, link.letterSpacing);
+  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, linkY + link.height / 2, link.letterSpacing);
   ctx.restore();
 
   ctx.textBaseline = "top";
 
-  // ── Time / Date — absolute positions ─────────────────────────────────────
+  // ── Time / Date ───────────────────────────────────────────────────────────
   const { timeRow } = F;
   const { iconSize } = timeRow;
 
@@ -207,13 +212,13 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   ctx.fillStyle = WHITE;
 
   if (briefing.time) {
-    drawClockIcon(ctx, F.clockIcon.x, F.clockIcon.y, iconSize, WHITE);
-    fillTextSpaced(ctx, briefing.time, F.time.x, F.time.y, timeRow.letterSpacing);
+    drawClockIcon(ctx, F.clockIcon.x, clockRowY, iconSize, WHITE);
+    fillTextSpaced(ctx, briefing.time, F.time.x, clockRowY + 1, timeRow.letterSpacing);
   }
 
   if (briefing.date) {
-    drawCalendarIcon(ctx, F.calendarIcon.x, F.calendarIcon.y, iconSize, WHITE);
-    fillTextSpaced(ctx, briefing.date, F.date.x, F.date.y, timeRow.letterSpacing);
+    drawCalendarIcon(ctx, F.calendarIcon.x, clockRowY, iconSize, WHITE);
+    fillTextSpaced(ctx, briefing.date, F.date.x, clockRowY + 1, timeRow.letterSpacing);
   }
 
   // ── Speaker photo (center crop + rounded clip) ────────────────────────────
