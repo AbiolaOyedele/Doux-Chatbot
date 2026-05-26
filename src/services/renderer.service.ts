@@ -170,9 +170,13 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   const TITLE_SPACING = F.title.letterSpacing;
   const actualTitleFS = fitFontSize(ctx, briefing.topic, "bold", title.width, title.height, title.fontSize, title.lineHeight);
   const titleLines = wordWrap(ctx, briefing.topic, actualTitleFS, "bold", title.width, TITLE_SPACING);
-  console.log(`[renderer] topic="${briefing.topic}" zone=${title.width}x${title.height} maxFS=${title.fontSize} actualFS=${actualTitleFS} lines=${titleLines.length}`);
   const splitAt = Math.max(0, titleLines.length - 2);
-  const titleLineH = actualTitleFS * title.lineHeight;
+
+  // Anchored spacing: stretch gap so line 0 sits at zone top and the bottom
+  // of the last line lands exactly at zone bottom — guarantees full fill.
+  const titleLineH = titleLines.length <= 1
+    ? actualTitleFS * title.lineHeight
+    : (title.height - actualTitleFS) / (titleLines.length - 1);
 
   ctx.font = `bold ${actualTitleFS}px "${FONT}"`;
   titleLines.forEach((line, i) => {
