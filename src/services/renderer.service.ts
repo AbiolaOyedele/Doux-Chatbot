@@ -75,6 +75,17 @@ function fitFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number
   return bestFS;
 }
 
+// Largest size, stepping down from maxFS, at which text fits maxWidth on a
+// single line. Used for the link pill, which is clipped to its rounded rect —
+// without this a long URL is silently cut off at the pill's right edge.
+function fitSingleLineFontSize(ctx: Ctx, text: string, fontStyle: string, maxWidth: number, maxFS: number, letterSpacing: number, minFS = 14): number {
+  for (let fs = maxFS; fs > minFS; fs--) {
+    ctx.font = `${fontStyle} ${fs}px "${FONT}"`;
+    if (measureWithSpacing(ctx, text, letterSpacing) <= maxWidth) return fs;
+  }
+  return minFS;
+}
+
 function wordWrap(ctx: Ctx, text: string, fontSize: number, fontStyle: string, maxWidth: number, letterSpacing = 0): string[] {
   if (!text.trim()) return [text];
   ctx.font = `${fontStyle} ${fontSize}px "${FONT}"`;
@@ -196,10 +207,16 @@ export async function renderFlyer(briefing: ParsedBriefing, photoBuffer: Buffer)
   ctx.save();
   roundedRectPath(ctx, link.x, linkY, link.width, link.height, link.cornerRadius);
   ctx.clip();
-  ctx.font = `bold ${link.fontSize}px "${FONT}"`;
+  // Shrink to fit: reserve paddingLeft on both sides so the URL never runs
+  // into the pill edge, then step the font down until the whole string fits.
+  const linkText = `→  ${briefing.link}`;
+  const linkMaxW = link.width - link.paddingLeft * 2;
+  const linkFS   = fitSingleLineFontSize(ctx, linkText, "bold", linkMaxW, link.fontSize, link.letterSpacing);
+
+  ctx.font = `bold ${linkFS}px "${FONT}"`;
   ctx.fillStyle = WHITE;
   ctx.textBaseline = "middle";
-  fillTextSpaced(ctx, `→  ${briefing.link}`, link.x + link.paddingLeft, linkY + link.height / 2, link.letterSpacing);
+  fillTextSpaced(ctx, linkText, link.x + link.paddingLeft, linkY + link.height / 2, link.letterSpacing);
   ctx.restore();
 
   ctx.textBaseline = "top";
